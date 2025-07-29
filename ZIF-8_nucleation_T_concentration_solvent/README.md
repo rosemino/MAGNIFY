@@ -1,1 +1,1 @@
-
+This directory contains files with the force field used in the publication of "Unveiling ZIF-8 nucleation mechanisms through molecular simulation: role of temperature, solvent and reactant concentration" by Sahar Andarzi Gargari and Rocio Semino
