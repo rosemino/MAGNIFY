@@ -31,7 +31,7 @@ angle_coeff  15   62.00     96.00       0.000      0.000   # charmm      # C4  S
  
 
  
-dihedral_style   hybrid charmm
+dihedral_style   charmm
 dihedral_coeff   1   charmm   0.614   2 180      0.00      # N1  C1  N1  Ne 
 dihedral_coeff   2   charmm   3.55    2 180      0.00      # H2  C2  C2  N1
 dihedral_coeff   3   charmm   6.64    2 180      0.00      # C2  C2  N1  C1
@@ -46,7 +46,7 @@ dihedral_coeff  11   charmm   0.34    2 180      0.00      # H2  C2  C2  H2
 dihedral_coeff  12   charmm   15.33   2 180      0.00      # N1  C2  C2  N1
 
 
-improper_style   hybrid cvff 
+improper_style   cvff 
 improper_coeff   1   none              # C2  H2  N1  C2
 improper_coeff   2   cvff 3.5    -1   2 # C1  N1  N1  C3 
 improper_coeff   3   cvff 0.056  -1   2 # N1  C2  C1  Ne 
