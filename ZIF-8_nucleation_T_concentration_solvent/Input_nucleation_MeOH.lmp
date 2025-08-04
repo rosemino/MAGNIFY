@@ -1,0 +1,53 @@
+# created by cif2lammps
+
+units     real
+boundary  p p p
+dimension 3
+newton    on
+#
+atom_style       full
+pair_style    hybrid/overlay lj/cut 13.0 coul/long 13.0 morse 13.0
+
+# Read coordinates, charges and potentials
+read_data     Initial_config_MeOH.data 
+include       forcefield_nbzifff_MeOH_real.lmp
+
+
+# Setup neighbor style
+neighbor 2.0 bin	
+neigh_modify every 1 delay 0 check yes
+ 
+# Variables
+variable dt         equal 0.5
+variable temp       equal 298.0
+variable press      equal 1.0
+variable tdamp      equal 100*${dt}
+variable pdamp      equal 1000*${dt}
+variable nprint     equal 100
+
+# groups for RDF
+group Nitrogen type 3
+group Zinc     type 1
+
+group2ndx index.data                                                                               
+
+#
+thermo_style  custom step etotal evdwl ecoul temp ebond eangle edihed eimp press vol cella cellb cellc
+thermo_modify flush yes
+thermo   ${nprint}
+
+restart 50000 zif.restart
+
+timestep ${dt}
+
+### PRODUCTION
+fix NPT all npt temp ${temp} ${temp} ${tdamp} iso ${press} ${press} ${pdamp}
+velocity all create ${temp} 123456789
+dump TRAJ3 all custom 500 npt.lammpstrj id type mol x y z
+dump_modify TRAJ3 sort id
+run 30000000
+unfix NPT
+undump TRAJ3
+
+write_data After_npt.lmps
+

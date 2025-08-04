@@ -1,0 +1,56 @@
+# created by cif2lammps
+
+units     real
+boundary  p p p
+dimension 3
+newton    on
+#
+atom_style       full
+pair_style    hybrid/overlay lj/cut 13.0 coul/long 13.0 morse 13.0
+
+# Read coordinates, charges and potentials
+read_data    Initial_config_ZnMIm2.data
+include      forcefield_nbzifff_DMSO_real.lmp
+
+
+# Setup neighbor style
+neighbor 2.0 bin	
+neigh_modify every 1 delay 0 check yes
+ 
+# Variables
+variable dt            equal 0.5
+variable temp          equal 298.0
+variable press         equal 1.0
+variable tdamp         equal 100*${dt}
+variable pdamp         equal 1000*${dt}
+variable nprint        equal 100
+
+
+# groups for RDF
+group Nitrogen     type 3
+group Zinc         type 1
+
+group2ndx index.data 
+
+#
+thermo_style  custom step etotal evdwl ecoul temp ebond eangle edihed eimp press vol cella cellb cellc
+thermo_modify flush yes
+thermo   ${nprint}
+
+restart 150000 zif.restart
+#
+timestep ${dt}
+
+### PRODUCTION
+fix 22 all plumed plumedfile plumed_ZnMIm2.inp outfile plumed.out
+
+fix NPT all npt temp ${temp} ${temp} ${tdamp} iso ${press} ${press} ${pdamp}
+dump TRAJ all custom 400 npt.lammpstrj id type mol x y z
+dump_modify TRAJ sort id
+run 3000000
+unfix NPT
+undump TRAJ
+unfix 22
+
+write_data After_NPT.lmps
+
