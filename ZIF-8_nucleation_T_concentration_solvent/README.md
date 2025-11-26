@@ -27,5 +27,6 @@ MeOH:
 Walkers:
  To run multiple walkers, separate directories must be prepared, and the WALKERS_ID must be set uniquely in each PLUMED input file; for example, with 5 walkers, WALKERS_ID should be defined as 0, 1, 2, 3 and 4 across the directories.
 
-Reference:
+References:
 http://arxiv.org/abs/2507.23574
+https://pubs.acs.org/doi/10.1021/acs.chemmater.5c02028
