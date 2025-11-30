@@ -1,0 +1,372 @@
+# USE WITH LAMMPS 2023
+# THE INPUT FILE MUST BE ASSIGNED AS mpirun lmp_mpi -np 'processors' -in 'input_file' DONT USE <
+
+units     real
+boundary  p p p
+dimension 3
+newton    on
+#
+atom_style      full
+bond_style      harmonic
+angle_style     charmm
+dihedral_style  charmm
+improper_style  cvff 
+
+pair_style      hybrid/overlay coul/long 13.0 morse 13.0 lj/cut 13.0 
+
+read_data          Initial_config.data
+include            forcefield_nbzifff_DMSO_real.lmp
+
+
+########################################################
+########################################################
+########################################################
+
+neighbor 2.0 bin
+neigh_modify once no every 1 delay 0 check yes
+
+variable dt         equal 0.5
+variable TK         equal 298.0
+variable TK_fin	    equal 298.0
+variable Pbar       equal 1.0
+variable tdamp      equal 100*${dt}
+variable pdamp      equal 1000*${dt}
+variable RandomSeed equal 123456789
+variable nprint     equal 10
+variable ndump      equal 10*${nprint}
+
+variable lowzn            equal 10
+variable cmumd_steps      equal 10000
+
+thermo   ${nprint}
+timestep ${dt}
+
+region MOF block -26.16 26.16 -24.75 24.75 40.0 80.0
+
+# ASING CORRECT MOLECULE INDEXES
+reset_atoms mol all
+
+# MOLECULE INPUT FILES TO READ
+molecule 2 mimidazol.inp
+molecule 3 zn.inp 
+
+restart 10000 zif.restart
+
+###### START BIG LOOP
+
+label loopbig
+variable big loop 1000
+print 'BIG LOOP STEP ${big}' 
+
+###### START CMUMD #########
+
+# DEFINE FREEZ REGION
+variable zlo2 equal 55.0
+variable zhi2 equal 65.0
+
+region freezslab block INF INF INF INF ${zlo2} ${zhi2} units box
+
+#CENTRAL SLAB IS NOT ALLOWED TO DISPLACE IN Z TO KEEP THE SYSTEM CENTRED
+group freeztype     type 1 6 
+group freezslab     region freezslab 
+group freezatoms    intersect freeztype freezslab 
+
+# DEFINE GROUPS
+group Nitrogen      type 3
+group Zinc          type 1
+group Carbon        type 2 6 7
+group Carbon1       type 6 
+group ZIF           region MOF 
+
+group2ndx index.data 
+
+# DEFINE RESERVOIR REGION
+variable zsize equal zlo+0.1*(zhi-zlo)
+variable zsize2 equal zhi-0.1*(zhi-zlo)
+variable xlow equal xlo+0.1
+variable xhigh equal xhi-0.1
+variable ylow equal ylo+0.1
+variable yhigh equal yhi-0.1
+variable zlow equal zlo+0.1
+variable zhigh equal zhi-0.1
+
+region reserv1 block ${xlow} ${xhigh} ${ylow} ${yhigh} ${zlow} ${zsize}
+region reserv2 block  ${xlow} ${xhigh} ${ylow} ${yhigh} ${zsize2} ${zhigh} 
+
+region reserv union 2 reserv1 reserv2
+
+# DEFINE GROUPS 
+group metal type 1 8
+group tot_reg region reserv
+group zn_res intersect tot_reg metal
+
+# COMPUTE NUMBER OF Zn ATOMS IN RESERVOIR
+variable counter equal count(Zinc,reserv)
+
+#SET OUTPUT FORMAT
+thermo_style custom step etotal evdwl ecoul temp ebond eangle edihed eimp press vol cella cellb cellc v_counter
+thermo_modify flush yes
+
+# CREATE VELOCITIES
+velocity all create ${TK} ${RandomSeed}
+
+#LOAD PLUMED
+fix 111 all plumed plumedfile plumed.inp outfile plumed.out
+
+#CENTRAL SLAB MOMENTUM IS ZERO FOR AVOIDING DISPLACEMENTS OF THE FULL SYSTEM
+fix 1 freezatoms momentum 1 linear 1 1 1
+
+#DEFINE NPT PROPAGATION
+fix NPT all npt temp ${TK} ${TK} ${tdamp} iso ${Pbar} ${Pbar} ${pdamp}
+
+#SET TRAJECTORY OUTPUT
+dump 88 all custom 1000 dump.lammpstrj id type mol x y z 
+dump_modify 88 sort id append yes
+
+#CMUMD LOOP
+label loopc
+variable c loop 1000
+run ${cmumd_steps}
+print 'CMUMD STEP ${c}' 
+
+print "ZNs IN RESERVOIR: $(count(Zinc,reserv))"
+
+if "$(count(Zinc,reserv)) <= ${lowzn}" then "jump SELF breakc"
+next c
+jump SELF loopc
+label breakc
+print "GO TO MC"
+
+undump 88
+unfix NPT
+unfix 1
+
+write_data final.lmps
+
+unfix 111
+
+#ALL VARIABLES, GROUPS AND REGIONS HAVE TO BE DELETED
+
+variable c delete
+variable counter delete
+variable zsize delete
+variable zsize2 delete
+variable xlow delete
+variable xhigh delete
+variable ylow delete
+variable yhigh delete
+variable zlow delete
+variable zhigh delete
+variable zlo2 delete
+variable zhi2 delete
+
+region reserv1 delete 
+region reserv2 delete 
+region reserv delete 
+region freezslab delete
+
+group Nitrogen delete
+group Zinc     delete
+group Carbon   delete
+group Carbon1  delete
+group metal    delete
+group tot_reg  delete
+group zn_res   delete
+group freeztype delete 
+group freezslab delete
+group freezatoms delete
+
+###### END CMUMD ###########
+
+
+####### START MONTE CARLO ##################
+
+# DEFINE RESERVOIR REGION
+variable zsize equal zlo+0.1*(zhi-zlo)
+variable zsize2 equal zhi-0.1*(zhi-zlo)
+variable xlow equal xlo+0.1
+variable xhigh equal xhi-0.1
+variable ylow equal ylo+0.1
+variable yhigh equal yhi-0.1
+variable zlow equal zlo+0.1
+variable zhigh equal zhi-0.1
+
+print 'RESERVOIR MC X ${xlow} ${xhigh} Y ${ylow} ${yhigh} ZLEFT ${zlow} ${zsize} ZRIGHT ${zsize2} ${zhigh}'
+
+region reserv1 block ${xlow} ${xhigh} ${ylow} ${yhigh} ${zlow} ${zsize}
+region reserv2 block  ${xlow} ${xhigh} ${ylow} ${yhigh} ${zsize2} ${zhigh} 
+
+region reserv union 2 reserv1 reserv2
+
+
+# DEFINE GROUPS 
+group Zinc type 1
+group Im type 6
+group metal type 1 8
+group tot_reg region reserv
+group zn_res intersect tot_reg metal
+
+group ligand  type 2 3 4 5 6 7 9
+group mim_res intersect ligand tot_reg
+
+group ions type 1 2 3 4 5 6 7 8 9
+
+group solvent type 10 11 12
+
+# COMPUTE NUMBER OF ATOMS IN GROUP
+compute countim mim_res count/type atom
+compute countzn zn_res count/type atom
+
+# SET VELOCITIES (IONS ARE FROZEN IN THIS PART)
+
+velocity      ions create 0.0 ${RandomSeed}
+velocity      solvent create ${TK} ${RandomSeed}
+
+# FIX NVT
+
+fix mdnvt solvent nvt temp ${TK} ${TK} ${tdamp} 
+
+thermo_style custom step temp etotal pe ecoul elong evdwl epair ebond emol press vol atoms c_countim[6] c_countzn[1]
+
+run 1
+
+# DESIRED AMOUNT OF ZN MOLECULES IN RESERVOIR
+variable nzn_max equal 15
+
+# DESIRED AMOUNT OF IMIDAZOLATE MOLECULES IN RESERVOIR (AUTOMATIC)
+variable mim0 equal c_countim[6]
+variable zn0 equal c_countzn[1]
+
+variable nim_max equal ${mim0}+2*(${nzn_max}-${zn0})
+
+dump DUMPMC all atom ${ndump} dumpmc.lammpstrj
+dump_modify DUMPMC sort id
+
+variable nim equal c_countim[6]
+variable nim_max_atoms equal ${nim_max}*13
+# c_countzn[1] MEASURES THE NUMBER OF ZN MOLECULES IN RESERVOIR
+variable nzn equal c_countzn[1]
+variable nzn_max_atoms equal ${nzn_max}*5
+
+# CREATE ATOMS ONLY IN RESERVOIR (REPLACE MAX WITH MAXIMUM NUMBER OF ATOMS DESIRED)
+# LIGAND
+
+# MONTE CARLO ALGORITHM
+fix MC mim_res gcmc 100 100 0 0 123456 298.0 500.0 0.05 mol 2 region reserv max ${nim_max_atoms}
+
+label loopa
+variable a loop 1000
+run 100
+
+#IF MORE MOLECULES THAN DESIRED WERE CREATED, DELETE THE EXTRA ONES.
+if "${nim} > ${nim_max}" then &
+	"variable delta equal ${nim}-${nim_max}" &
+	"delete_atoms random count ${delta} yes mim_res NULL 482793 mol yes" &
+	"variable delta delete"
+
+print 'MAX IM ${nim_max} NIM ${nim} nim_max_atoms ${nim_max_atoms}' 
+
+if "${nim} == ${nim_max}" then "jump SELF break"
+next a
+jump SELF loopa
+label break
+print "IMIDAZOLATES ADDED"
+
+# ZINC
+unfix MC
+
+# MONTE CARLO ALGORITHM
+fix MC zn_res gcmc 100 100 0 0 123456 298.0 100.0 0.05 mol 3 region reserv max ${nzn_max_atoms}
+
+label loop2
+variable b loop 1000
+run 100
+
+#IF MORE MOLECULES THAN DESIRED WERE CREATED, DELETE THE EXTRA ONES.
+if "${nzn} > ${nzn_max}" then &	
+	"variable delta equal ${nzn}-${nzn_max}" &
+	"delete_atoms random count ${delta} yes zn_res NULL 482793 mol yes" &
+	"variable delta delete"
+
+print "NZN ${nzn} NZNMAX ${nzn_max} NZNMAXATOMS ${nzn_max_atoms}"
+#print "NZN $(count(Zn,reserv)) NZNMAX ${nzn_max} NZNMAXATOMS ${nzn_max_atoms}"
+if "${nzn} == ${nzn_max}" then "jump SELF break2"
+next b
+jump SELF loop2
+
+label break2
+print "ZNS ADDED"
+
+unfix MC
+
+unfix mdnvt
+undump DUMPMC
+
+# SET CHARGES OF ADDED IONS:
+set type 1 charge 0.3536
+set type 2 charge -0.0662
+set type 3 charge 0.0
+set type 4 charge 0.1141
+set type 5 charge 0.1381
+set type 6 charge 0.4375
+set type 7 charge -0.4606
+set type 8 charge 0.0884
+set type 9 charge -0.4203
+
+# RESET ATOM IDS FOR BEING CONSECUTIVE:
+reset_atoms id sort yes
+
+# WRITE DATA FILE:
+write_data filled.data
+
+# DELETE 
+
+uncompute countzn
+uncompute countim
+
+region reserv1 delete 
+region reserv2 delete 
+region reserv delete 
+
+variable nzn_max delete
+variable mim0 delete
+variable zn0 delete
+variable nim_max delete
+variable nim delete
+variable nim_max_atoms delete
+variable nzn delete
+variable nzn_max_atoms delete
+variable a delete
+variable b delete
+
+
+variable zsize delete
+variable zsize2 delete
+variable xlow delete
+variable xhigh delete
+variable ylow delete
+variable yhigh delete
+variable zlow delete
+variable zhigh delete
+
+group Zinc delete
+group Im   delete
+group metal delete
+group tot_reg delete
+group zn_res delete
+group ligand delete
+group mim_res delete
+group ions delete
+group solvent delete
+
+########  END MONTE CARLO ################
+
+
+next big
+jump SELF loopbig
+
+######## END BIG LOOP ##################
+
+
+
+
