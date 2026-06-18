@@ -5,7 +5,7 @@ C1: GROUP NDX_FILE=index.data ndx_group=Carbon1
 N:  GROUP NDX_FILE=index.data ndx_group=Nitrogen
 FREEZE: GROUP NDX_FILE=index.data ndx_group=freezatoms
 
-a: FIXEDATOM AT=0,0,0
+a: FIXEDATOM AT=0.0,0.0,0.0
 
 cnn: COORDINATIONNUMBER SPECIESA=ZN SPECIESB=N SWITCH={RATIONAL R_0=0.05 D_0=0.2}
 s: AROUND DATA=cnn ATOM=a ZLOWER=-2.2 ZUPPER=2.2 SIGMA=0.1 SUM
